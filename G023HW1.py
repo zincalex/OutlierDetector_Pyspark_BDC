@@ -4,6 +4,30 @@ import os
 import time
 import math
 
+""" 
+import matplotlib.pyplot as plt
+def plot_points(points):
+    
+    # Extract x and y coordinates from the list of points
+    x_coords = [point[0] for point in points]
+    y_coords = [point[1] for point in points]
+
+    # Create a scatter plot
+    plt.scatter(x_coords, y_coords, color='blue', label='Points')
+
+    # Set labels and title
+    plt.xlabel('X-axis')
+    plt.ylabel('Y-axis')
+    plt.title('Plot of Points')
+
+    # Add legend
+    plt.legend()
+
+    # Display the plot
+    plt.grid(True)
+    plt.show()
+"""
+
 def str_to_point(point):
     # Function that takes a string representing a point and returns it as a couple of integers
     return float(point.split(',')[0]), float(point.split(',')[1])
@@ -13,33 +37,30 @@ def ExactOutliers(listOfPoints, D, M, K):
 
     outliers = []
     num_outliers = 0
-    for p in listOfPoints : 
-        for q in listOfPoints : 
-            B_S_p = 0
-            if p != q :
-                dist = math.sqrt((p[0] - q[0])**2 + ((p[1] - q[1])**2))
-                if dist <= D : 
-                    B_S_p += 1
-                
-        
+    for i in range(len(listOfPoints)) : 
+        B_S_p = 0
+
+        for j in range(i+1, len(listOfPoints)) : 
+            dist = math.sqrt((listOfPoints[i][0] - listOfPoints[j][0])**2 + ((listOfPoints[i][1] - listOfPoints[j][1])**2))
+            if dist <= D : B_S_p += 1
+
         if B_S_p <= M : 
             num_outliers += 1
-            outliers.append((p, B_S_p))
+            outliers.append((listOfPoints[i], B_S_p))
 
-    
+
     outliers = sorted(outliers, key=lambda x : x[1])
-    print(outliers)
 
     print("----------------------------------------------")
     print("Numbers of (%.2f, %d)-outliers : %d" %(D, M, num_outliers))
-    for k in range(0, K) :   
+    for k in range(min(K, len(outliers))) :   
         print(outliers[k][0])
     print("----------------------------------------------")
-    
-
-
     print("ExactOutliers() running time: --- %s seconds ---" % (time.time() - start_time))
+
     return
+
+
 
 
 def MRApproxOutliers(inputPoints, D, M, K):
