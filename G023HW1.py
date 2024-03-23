@@ -45,11 +45,6 @@ def ExactOutliers(listOfPoints, D, M, K):
                 dist = math.sqrt((listOfPoints[i][0] - listOfPoints[j][0])**2 + ((listOfPoints[i][1] - listOfPoints[j][1])**2))
                 if dist <= D : B_S_p += 1
 
-        """ 
-        for j in range(i+1, len(listOfPoints)) : 
-            dist = math.sqrt((listOfPoints[i][0] - listOfPoints[j][0])**2 + ((listOfPoints[i][1] - listOfPoints[j][1])**2))
-            if dist <= D : B_S_p += 1
-        """
 
         if B_S_p <= M : 
             num_outliers += 1
