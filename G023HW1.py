@@ -47,7 +47,6 @@ def ExactOutliers(listOfPoints, D, M, K):
             num_outliers += 1
             outliers.append((listOfPoints[i], B_S_p))
 
-    
     outliers = sorted(outliers, key=lambda x : x[1])
     print("----------------------------------------------")
     print("Numbers of (%.2f, %d)-outliers : %d" %(D, M, num_outliers))
@@ -157,8 +156,9 @@ def main():
     print("L = ", L)
     print("Total number of points :", numPoints)
     
-    listOfPoints = inputPoints.collect()
+    
     if numPoints <= 200000 : # EXACT ALGORITHM
+        listOfPoints = inputPoints.collect()
         ExactOutliers(listOfPoints, D, M, K)
     
 
@@ -171,7 +171,7 @@ def main():
     """
     
     # APPROXIMATE ALGORITHM
-    MRApproxOutliers(inputPoints, D, M, K)
+    #MRApproxOutliers(inputPoints, D, M, K)
 
     
     
