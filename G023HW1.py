@@ -39,9 +39,8 @@ def ExactOutliers(listOfPoints, D, M, K):
         B_S_p = 0
 
         for j in range(len(listOfPoints)) :
-            if(j != i) : 
-                dist = math.sqrt((listOfPoints[i][0] - listOfPoints[j][0])**2 + ((listOfPoints[i][1] - listOfPoints[j][1])**2))
-                if dist <= D : B_S_p += 1
+            dist = math.sqrt((listOfPoints[i][0] - listOfPoints[j][0])**2 + ((listOfPoints[i][1] - listOfPoints[j][1])**2))
+            if dist <= D : B_S_p += 1
 
         if B_S_p <= M : 
             num_outliers += 1
@@ -74,24 +73,19 @@ def count_points_per_cell(inputPoints, D):
 
     return [(key, cell_dict[key]) for key in cell_dict.keys()]
 
-def gather_pairs_partitions(pairs):
-    dic = {}
-    for p in pairs :
-        cell, loc_num_points = p[0], p[1]
-        if cell not in dic.keys():
-            dic[cell] = loc_num_points
-        else: dic[cell] += loc_num_points
-    return [(key, dic[key]) for key in dic.keys()]
-
 
 # Count how many points are in the neighborhood size x s
-def count_in_neighborhood(cell, size):
-    cell_i = cell[0][0]
-    cell_j = cell[0][1]
-    neighbors = []
-    for i in range(-(size // 2), size // 2 + 1):
-        for j in range(-(size // 2), size // 2 + 1):
-            neighbors.append((cell_i + i, cell_j + j), 1)
+def count_in_neighborhood(RDDs_cell_counts):
+    size_3 = 3
+    size_7 = 7
+    
+    for elem in RDDs_cell_counts :  
+        neighbors = []
+        for i in range(-(size_3 // 2), size_3 // 2 + 1):
+            for j in range(-(size_3 // 2), size_3 // 2 + 1):
+                neighbors.append((cell_i + i, cell_j + j), 1)
+
+
     return neighbors
 
 def MRApproxOutliers(inputPoints, D, M, K):
@@ -99,21 +93,23 @@ def MRApproxOutliers(inputPoints, D, M, K):
     LAMBDA = D/2*math.sqrt(2)
 
     # Step A 
-    # TODO might consider to update flatMap -> map (map used for functions 1 on 1, that is our case since point -> unique cell)
+    """
     R1 = (inputPoints.flatMap(lambda points: count_points_per_cell(points, LAMBDA)) # MAP PHASE R1 (flatMap applies the function independently to each partition.)
                      .mapPartitions(gather_pairs_partitions) #reduce phase R1 (Return a new RDD by applying a function to each partition of this RDD)
                      .groupByKey() # SHUFFLE + GROUPING
                      .mapValues(lambda num_points : sum(num_points))) #REDUCE PHASE R2 (no map phase here)
+    """
 
+    cell_counts = (inputPoints.flatMap(lambda points: count_points_per_cell(points, LAMBDA)) # MAP PHASE R1 (flatMap applies the function independently to each partition.)
+                    .reduceByKey(lambda x,y : x + y))
+                     
+                     
     # Step B - 3x3 and 7x7 neighborhood
-    neighborhood_3x3_sum = (R1.flatMap(lambda cell: count_in_neighborhood(cell[0], 3))  # cell[0] contains the cell coordinates
+    neighborhood_3x3_sum = (cell_counts.flatMap(count_in_neighborhood)  # cell[0] contains the cell coordinates
                           .map(lambda cell: cell[1])                                    # cell[1] contains the count of points from R1
                           .sum())
-    neighborhood_7x7_sum = (R1.flatMap(lambda cell: count_in_neighborhood(cell[0], 7)) 
-                          .map(lambda cell: cell[1])
-                          .sum())
 
-    return R1.sum()
+    return cell_counts.sum()
 
 
 def main():
