@@ -28,7 +28,7 @@ def plot_points(points):
 
 def str_to_point(point):
     # Function that takes a string representing a point and returns it as a couple of integers
-    return float(point.split(',')[0]), float(point.split(',')[1])
+    return (float(point.split(',')[0]), float(point.split(',')[1]))
 
 def ExactOutliers(listOfPoints, D, M, K):
     start_time = time.time()
@@ -47,69 +47,102 @@ def ExactOutliers(listOfPoints, D, M, K):
             outliers.append((listOfPoints[i], B_S_p))
 
     outliers = sorted(outliers, key=lambda x : x[1])
-    print("----------------------------------------------")
-    print("Numbers of (%.2f, %d)-outliers : %d" %(D, M, num_outliers))
+    
+    print(f"Number of outliers = {num_outliers}")
     for k in range(min(K, len(outliers))) :   
-        print(outliers[k][0])
-    print("----------------------------------------------")
-    print("ExactOutliers() running time: --- %s seconds ---" % (time.time() - start_time))
+        print(f"Point: {outliers[k][0]}")
+    print(f"Running time of ExactOutliers = {time.time() - start_time} ms")
+    
 
 # Find the cell where a point is
 def find_cell(point, cell_size):    # cell_size is LAMBDA
     x = point[0]
     y = point[1]
-    i = int(x / cell_size)
+    i = int(x / cell_size) # cast to int to do the floor of the division
     j = int(y / cell_size)
     return (i, j)
 
 # Count the number of points in the same cell
-def count_points_per_cell(inputPoints, D):
-    cell_dict = {}
-    for point in inputPoints:
-        cell_cord = find_cell(point, D)
-        if cell_cord not in cell_dict.keys():
-            cell_dict[cell_cord] = 1
-        else: cell_dict[cell_cord] += 1
+def count_points_per_cell(point, LAMBDA):  
 
-    return [(key, cell_dict[key]) for key in cell_dict.keys()]
+    cell_cord = find_cell(point, LAMBDA)
+    print(cell_cord)
+    return ((cell_cord[0], cell_cord[1]), 1)
+
+
+def find_cost_index_list(list_cell_count, target_cord):
+    for key_val in list_cell_count:
+        if (key_val[0][0] == target_cord[0] and key_val[0][1] == target_cord[1]) :
+            return key_val[1]
+    
+    return 0
+
 
 
 # Count how many points are in the neighborhood size x s
-def count_in_neighborhood(RDDs_cell_counts):
+def count_in_neighborhood(list_cell_count):
     size_3 = 3
     size_7 = 7
     
-    for elem in RDDs_cell_counts :  
+    list_refactor = []
+    for elem in list_cell_count :  
         neighbors = []
+        cost_neighbours_grid3 = 0
+        cost_neighbours_grid7 = 0
         for i in range(-(size_3 // 2), size_3 // 2 + 1):
             for j in range(-(size_3 // 2), size_3 // 2 + 1):
-                neighbors.append((cell_i + i, cell_j + j), 1)
+                cost_neighbours_grid3 += find_cost_index_list(list_cell_count, (elem[0][0] + i, elem[0][1] + j)) 
+
+        for i in range(-(size_7 // 2), size_7 // 2 + 1):
+            for j in range(-(size_7 // 2), size_7 // 2 + 1):
+                cost_neighbours_grid7 += find_cost_index_list(list_cell_count, (elem[0][0] + i, elem[0][1] + j))
+
+        list_refactor.append((elem[0], elem[1], cost_neighbours_grid3, cost_neighbours_grid7))
+    return list_refactor
 
 
-    return neighbors
+
 
 def MRApproxOutliers(inputPoints, D, M, K):
+    start_time = time.time()
     # Divide R^2 into matrix of size LAMBDA where (i*LAMBDA, j*LAMBDA) are the real coordinates
     LAMBDA = D/2*math.sqrt(2)
 
+   
     # Step A 
-    """
-    R1 = (inputPoints.flatMap(lambda points: count_points_per_cell(points, LAMBDA)) # MAP PHASE R1 (flatMap applies the function independently to each partition.)
-                     .mapPartitions(gather_pairs_partitions) #reduce phase R1 (Return a new RDD by applying a function to each partition of this RDD)
-                     .groupByKey() # SHUFFLE + GROUPING
-                     .mapValues(lambda num_points : sum(num_points))) #REDUCE PHASE R2 (no map phase here)
-    """
+    cell_counts = (inputPoints.flatMap(lambda points: count_points_per_cell(points, LAMBDA))
+                              .reduceByKey(lambda x,y : x + y))
+                              #.sortByKey(True
 
-    cell_counts = (inputPoints.flatMap(lambda points: count_points_per_cell(points, LAMBDA)) # MAP PHASE R1 (flatMap applies the function independently to each partition.)
-                    .reduceByKey(lambda x,y : x + y))
                      
-                     
-    # Step B - 3x3 and 7x7 neighborhood
-    neighborhood_3x3_sum = (cell_counts.flatMap(count_in_neighborhood)  # cell[0] contains the cell coordinates
-                          .map(lambda cell: cell[1])                                    # cell[1] contains the count of points from R1
-                          .sum())
+    # Step B    
+    
+    cell_counts_list = cell_counts.collect()
+    cell_counts_list = count_in_neighborhood(cell_counts_list)
 
-    return cell_counts.sum()
+
+    true_outliers = 0
+    uncertain_outliers = 0
+    for elem in cell_counts_list :
+        if (elem[3] <= M):
+            true_outliers += 1
+        if (elem[3] > M and elem[2] <= M):
+            uncertain_outliers += 1
+            
+          
+    
+    print(f"Number of sure outliers = {true_outliers}")
+    print(f"Number of uncertain outliers = {uncertain_outliers}")
+    
+    
+    #for k in range(min(K, len(nonEmpty_cells))):   
+    #   print(f"Cell: {nonEmpty_cells[k][0]}  Size = {nonEmpty_cells[k][1]}")
+        
+    print(f"Running time of MRApproxOutliers = {time.time() - start_time} ms")    
+    
+    return 
+
+
 
 
 def main():
@@ -141,40 +174,21 @@ def main():
     data_path = sys.argv[1]
     assert os.path.isfile(data_path), "File not found"
     rawData = sc.textFile(data_path)                                    # Read input points into an RDD of strings
-    inputPoints = rawData.map(str_to_point).repartition(L).cache()      # Transform the RDD of strings into an RDD of points using the function str_to_point
+    inputPoints = rawData.map(str_to_point).repartition(L).cache()      # (.distinct())Transform the RDD of strings into an RDD of points using the function str_to_point
     numPoints = inputPoints.count()                                     # Total number of points in the RDD
     
     # PRINTING PARAMETERS
-    print("Dataset = ", data_path.split("\\")[-1])
-    print("D = ", D)
-    print("M = ", M)
-    print("K = ", K)
-    print("L = ", L)
-    print("Total number of points :", numPoints)
+    print(f"Dataset = {data_path.split("\\")[-1]} D={D} M={M} K={K} L={L}")
+    print("Number of points = ", numPoints)
     
     
     if numPoints <= 200000 : # EXACT ALGORITHM
         listOfPoints = inputPoints.collect()
         ExactOutliers(listOfPoints, D, M, K)
     
-
-    #plot_points(listOfPoints)
-    """
-    # Print partitions
-    partition_data = inputPoints.glom().collect()
-    for i, partition in enumerate(partition_data):
-        print(f"Partition {i}: {partition}")
-    """
-    
     # APPROXIMATE ALGORITHM
-    #MRApproxOutliers(inputPoints, D, M, K)
+    MRApproxOutliers(inputPoints, D, M, K)
 
     
-    
-
-    
-
-
-
 if __name__ == "__main__":
     main()
