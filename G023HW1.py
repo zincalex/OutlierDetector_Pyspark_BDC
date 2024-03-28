@@ -63,11 +63,18 @@ def find_cell(point, cell_size):    # cell_size is LAMBDA
     return (i, j)
 
 # Count the number of points in the same cell
-def count_points_per_cell(point, LAMBDA):  
+def count_points_per_cell(inputPoints, LAMBDA):  
+    cell_dict = {}
+    for point in inputPoints:
+        cell_cord = find_cell(point, LAMBDA)
+        if cell_cord not in cell_dict.keys():
+            cell_dict[cell_cord] = 1
+        else: cell_dict[cell_cord] += 1
 
-    cell_cord = find_cell(point, LAMBDA)
-    print(cell_cord)
-    return ((cell_cord[0], cell_cord[1]), 1)
+    return [(key, cell_dict[key]) for key in cell_dict.keys()]
+    #cell_cord = find_cell(point, LAMBDA)
+    #print(point)
+    #return ((cell_cord[0], cell_cord[1]), 1)
 
 
 def find_cost_index_list(list_cell_count, target_cord):
@@ -89,9 +96,12 @@ def count_in_neighborhood(list_cell_count):
         neighbors = []
         cost_neighbours_grid3 = 0
         cost_neighbours_grid7 = 0
+
+        # TODO START FROM 7 AND GO DOWN
         for i in range(-(size_3 // 2), size_3 // 2 + 1):
             for j in range(-(size_3 // 2), size_3 // 2 + 1):
                 cost_neighbours_grid3 += find_cost_index_list(list_cell_count, (elem[0][0] + i, elem[0][1] + j)) 
+                cost_neighbours_grid7 += cost_neighbours_grid3
 
         for i in range(-(size_7 // 2), size_7 // 2 + 1):
             for j in range(-(size_7 // 2), size_7 // 2 + 1):
@@ -108,29 +118,31 @@ def MRApproxOutliers(inputPoints, D, M, K):
     # Divide R^2 into matrix of size LAMBDA where (i*LAMBDA, j*LAMBDA) are the real coordinates
     LAMBDA = D/2*math.sqrt(2)
 
-   
+    
     # Step A 
-    cell_counts = (inputPoints.flatMap(lambda points: count_points_per_cell(points, LAMBDA))
+    cell_counts = (inputPoints.mapPartitions(lambda point: count_points_per_cell(point, LAMBDA)) 
+                              .reduceByKey(lambda x,y : x + y))
+    """
+    cell_counts = (inputPoints.flatMap(lambda point: count_points_per_cell(point, LAMBDA))
                               .reduceByKey(lambda x,y : x + y))
                               #.sortByKey(True
+    """        
 
-                     
     # Step B    
-    
     cell_counts_list = cell_counts.collect()
+    
+    
     cell_counts_list = count_in_neighborhood(cell_counts_list)
-
 
     true_outliers = 0
     uncertain_outliers = 0
     for elem in cell_counts_list :
         if (elem[3] <= M):
-            true_outliers += 1
+            true_outliers += elem[1]
         if (elem[3] > M and elem[2] <= M):
-            uncertain_outliers += 1
+            uncertain_outliers += elem[1]
             
-          
-    
+        
     print(f"Number of sure outliers = {true_outliers}")
     print(f"Number of uncertain outliers = {uncertain_outliers}")
     
@@ -178,7 +190,7 @@ def main():
     numPoints = inputPoints.count()                                     # Total number of points in the RDD
     
     # PRINTING PARAMETERS
-    print(f"Dataset = {data_path.split("\\")[-1]} D={D} M={M} K={K} L={L}")
+    #print(f"Dataset = {data_path.split("\\")[-1]} D={D} M={M} K={K} L={L}")
     print("Number of points = ", numPoints)
     
     
