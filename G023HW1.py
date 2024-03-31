@@ -3,7 +3,6 @@ import sys
 import os
 import time
 import math
-import matplotlib.pyplot as plt
 
 
 def str_to_point(point):
@@ -52,8 +51,8 @@ def count_points_per_cell(partition, LAMBDA):
     Count for the given partition how many points are inside each cells for the given partition
 
     Parameters:
-    partition (list) : points inside a partition
-    LAMBDA (float)   : lenght of the square sides of the cells
+    partition (RDD) : points inside a partition
+    LAMBDA (float)  : lenght of the square sides of the cells
 
     Returns: 
     A list with key-value pairs, where the key are the cell indexes and the value is 
@@ -107,6 +106,20 @@ def invert_key_value(RDD) :
 
 
 def MRApproxOutliers(inputPoints, D, M, K):
+    """ 
+    Consists of two main steps. Step A transforms the input RDD into an RDD whose elements corresponds to the non-empty cells and, 
+    contain, for each cell, its identifier (i,j) and the number of points of S that it contains. The computation is be done by exploiting 
+    the Spark partitions, without gathering together all points of a cell (which could be too many). 
+    Step B transforms the RDD of cells, resulting from Step A, by attaching to each element, relative to a non-empty cell C, the values |N3(C)|
+    and |N7(C)|, as additional info. It is assumed that the total number of non-empty cells is small with respect to the 
+    capacity of each executor's memory, and therefore are downloaded in a local data structure.
+
+    Parameters:
+    inputPoints (RDD) : all points in the dataset
+    D (float)         : distance to consider around a point, outliers distance 
+    M (int)           : minimum number of points inside a cell to not be an outliers
+    K (int)           : maximum number of points to be printed 
+    """
     start_time = time.time()
     LAMBDA = D / (2*math.sqrt(2))
 
@@ -114,7 +127,6 @@ def MRApproxOutliers(inputPoints, D, M, K):
     non_empty_cells = (inputPoints.mapPartitions(lambda partition: count_points_per_cell(partition, LAMBDA)) 
                                   .reduceByKey(lambda x,y : x + y))
     non_empty_cells_dict = non_empty_cells.collectAsMap()   # Dictionary with (cell indexes, size)     
-
 
     # Step B    
     outliers_RDD = (non_empty_cells.flatMap(lambda cell: count_neighborhood(cell, non_empty_cells_dict)))
@@ -138,7 +150,6 @@ def MRApproxOutliers(inputPoints, D, M, K):
     print(f"Running time of MRApproxOutliers = {time.time() - start_time} ms")    
     
     return 
-
 
 
 
