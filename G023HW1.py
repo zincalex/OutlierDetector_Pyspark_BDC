@@ -23,7 +23,7 @@ def ExactOutliers(listOfPoints, D, M, K):
     M (int)             : minimum number of points inside a cell to not be an outliers
     K (int)             : maximum number of points to be printed    
     """
-    start_time = time.time()
+    start_time = time.time() * 1000
 
     outliers = []
     num_outliers = 0
@@ -42,7 +42,7 @@ def ExactOutliers(listOfPoints, D, M, K):
     print(f"Number of outliers = {num_outliers}")
     for k in range(min(K, len(outliers))) :   
         print(f"Point: {outliers[k][0]}")
-    print(f"Running time of ExactOutliers = {time.time() - start_time} ms")
+    print(f"Running time of ExactOutliers = {time.time()*1000 - start_time} ms")
     
 
 
@@ -51,8 +51,8 @@ def count_points_per_cell(partition, LAMBDA):
     Count for the given partition how many points are inside each cells for the given partition
 
     Parameters:
-    partition (RDD) : points inside a partition
-    LAMBDA (float)  : lenght of the square sides of the cells
+    partition (itertools.chain) : iterator to points inside a partition
+    LAMBDA (float)              : lenght of the square sides of the cells
 
     Returns: 
     A list with key-value pairs, where the key are the cell indexes and the value is 
@@ -120,7 +120,7 @@ def MRApproxOutliers(inputPoints, D, M, K):
     M (int)           : minimum number of points inside a cell to not be an outliers
     K (int)           : maximum number of points to be printed 
     """
-    start_time = time.time()
+    start_time = time.time() * 1000
     LAMBDA = D / (2*math.sqrt(2))
 
     # Step A 
@@ -147,7 +147,7 @@ def MRApproxOutliers(inputPoints, D, M, K):
     
     for i in ordered_cells :        # i = (cellSize, cell indexes)
         print(f"Cell: {i[1]}  Size = {i[0]}") 
-    print(f"Running time of MRApproxOutliers = {time.time() - start_time} ms")    
+    print(f"Running time of MRApproxOutliers = {time.time()*1000 - start_time} ms")    
     
     return 
 
@@ -186,7 +186,7 @@ def main():
     numPoints = inputPoints.count()                                     # Total number of points in the RDD
     
     # PRINTING PARAMETERS
-    print(f"Dataset = {data_path.split("\\")[-1]} D={D} M={M} K={K} L={L}")
+    print(f"{data_path} D={D} M={M} K={K} L={L}")
     print("Number of points = ", numPoints)
     
     
