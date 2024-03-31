@@ -5,32 +5,25 @@ import time
 import math
 import matplotlib.pyplot as plt
 
-def plot_points(points):
-    
-    # Extract x and y coordinates from the list of points
-    x_coords = [point[0] for point in points]
-    y_coords = [point[1] for point in points]
-
-    # Create a scatter plot
-    plt.scatter(x_coords, y_coords, color='blue', label='Points')
-
-    # Set labels and title
-    plt.xlabel('X-axis')
-    plt.ylabel('Y-axis')
-    plt.title('Plot of Points')
-
-    # Add legend
-    plt.legend()
-
-    # Display the plot
-    plt.grid(True)
-    plt.show()
 
 def str_to_point(point):
-    # Function that takes a string representing a point and returns it as a couple of integers
+    """ 
+    Function that takes a string representing a point and returns it as a couple of integers
+    """
     return (float(point.split(',')[0]), float(point.split(',')[1]))
 
+
+
 def ExactOutliers(listOfPoints, D, M, K):
+    """
+    Compute all N(N-1)/2 pairwise distances among the points
+
+    Parameters:
+    listOfPoints (list) : list with with points as (cordinate_x, cordinate_y)
+    D (float)           : distance to consider around a point, outliers distance 
+    M (int)             : minimum number of points inside a cell to not be an outliers
+    K (int)             : maximum number of points to be printed    
+    """
     start_time = time.time()
 
     outliers = []
@@ -52,8 +45,42 @@ def ExactOutliers(listOfPoints, D, M, K):
         print(f"Point: {outliers[k][0]}")
     print(f"Running time of ExactOutliers = {time.time() - start_time} ms")
     
-# Count how many points are in the neighborhood 
-def count_neighborhood(cell, cell_size_dict):
+
+
+def count_points_per_cell(partition, LAMBDA):  
+    """
+    Count for the given partition how many points are inside each cells for the given partition
+
+    Parameters:
+    partition (list) : points inside a partition
+    LAMBDA (float)   : lenght of the square sides of the cells
+
+    Returns: 
+    A list with key-value pairs, where the key are the cell indexes and the value is 
+    the local amount of points for a partition inside a cell 
+    """
+    part_dict = {}
+    for point in partition:
+        cell_cord = (int(math.floor(point[0] / LAMBDA)), int(math.floor(point[1] / LAMBDA)))
+        if cell_cord not in part_dict.keys():
+            part_dict[cell_cord] = 1
+        else: part_dict[cell_cord] += 1
+
+    return [(key, part_dict[key]) for key in part_dict.keys()]
+
+
+
+def count_neighborhood(cell, non_empty_cells_dict):
+    """
+    Add to the given cell the number of points inside the 3x3 grid and 7x7 grid around the cell 
+
+    Parameters:
+    cell (tuple)                      : (cell indexes(tuple), cell size (int))
+    non_empty_cells_dict (dictionary) : dictionary with all the non empty cells and their respective cell size
+
+    Returns: 
+    A list with a single element [(cell indexes, (cell size, N3, N7))
+    """
     size_3 = 3
     size_7 = 7
     
@@ -62,26 +89,22 @@ def count_neighborhood(cell, cell_size_dict):
     for i in range(-(size_7 // 2), size_7 // 2 + 1):
         for j in range(-(size_7 // 2), size_7 // 2 + 1):
            key_shift = (cell[0][0] + i, cell[0][1] + j)
-           N7 += cell_size_dict.get(key_shift, 0) # If the key is found return the value, otherwise 0
+           N7 += non_empty_cells_dict.get(key_shift, 0) # If the key is found return the value, otherwise 0
 
            if ((i >= -1 and i <= 1) and (j >= -1 and j <= 1)) : # Inside the 3x3 area 
-               N3 += cell_size_dict.get(key_shift, 0)
+               N3 += non_empty_cells_dict.get(key_shift, 0)
  
     return  [(cell[0], (cell[1], N3, N7))]
 
 
-def count_points_per_cell(partitions, LAMBDA):  
-    part_dict = {}
-    for point in partitions:
-        cell_cord = (int(math.floor(point[0] / LAMBDA)), int(math.floor(point[1] / LAMBDA)))
-        if cell_cord not in part_dict.keys():
-            part_dict[cell_cord] = 1
-        else: part_dict[cell_cord] += 1
-
-    return [(key, part_dict[key]) for key in part_dict.keys()]
 
 def invert_key_value(RDD) :
+    """
+    Given an RDD, it swaps the key and the value 
+    """
     return [(RDD[1], RDD[0])]
+
+
 
 def MRApproxOutliers(inputPoints, D, M, K):
     start_time = time.time()
@@ -90,22 +113,19 @@ def MRApproxOutliers(inputPoints, D, M, K):
     # Step A 
     non_empty_cells = (inputPoints.mapPartitions(lambda partition: count_points_per_cell(partition, LAMBDA)) 
                                   .reduceByKey(lambda x,y : x + y))
-          
+    non_empty_cells_dict = non_empty_cells.collectAsMap()   # Dictionary with (cell indexes, size)     
+
+
     # Step B    
-    cell_size_dict = non_empty_cells.collectAsMap() # Dictionary with (cell indexes, size)
-    
-    #Ogni partizione ha elementi con (cell indexes, size), non serve unire dopo per chiave pechè queste sono già state unite prima
-    outliers_RDD = (non_empty_cells.flatMap(lambda cell: count_neighborhood(cell, cell_size_dict)))
+    outliers_RDD = (non_empty_cells.flatMap(lambda cell: count_neighborhood(cell, non_empty_cells_dict)))
+    outliers = outliers_RDD.collect()   # List of (cell indexes, (size, N3, N7))
 
-    outliers = outliers_RDD.collect()
-
-    
     true_outliers = 0
     uncertain_outliers = 0
     for elem in outliers :          # elem = ((index, index), (cellSize, N3, N7))
         if (elem[1][2] <= M): true_outliers += elem[1][0]
         elif (elem[1][1] <= M): uncertain_outliers += elem[1][0]
-            
+
     print(f"Number of sure outliers = {true_outliers}")
     print(f"Number of uncertain outliers = {uncertain_outliers}")
     
@@ -114,8 +134,7 @@ def MRApproxOutliers(inputPoints, D, M, K):
                                         .take(K))
     
     for i in ordered_cells :        # i = (cellSize, cell indexes)
-        print(f"Cell: {i[1]}  Size = {i[0]}")
-        
+        print(f"Cell: {i[1]}  Size = {i[0]}") 
     print(f"Running time of MRApproxOutliers = {time.time() - start_time} ms")    
     
     return 
