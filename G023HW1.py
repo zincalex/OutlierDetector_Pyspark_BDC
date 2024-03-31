@@ -53,100 +53,65 @@ def ExactOutliers(listOfPoints, D, M, K):
         print(f"Point: {outliers[k][0]}")
     print(f"Running time of ExactOutliers = {time.time() - start_time} ms")
     
-
-# Find the cell where a point is
-def find_cell(point, cell_size):    # cell_size is LAMBDA
-    x = point[0]
-    y = point[1]
-    i = int(x / cell_size) # cast to int to do the floor of the division
-    j = int(y / cell_size)
-    return (i, j)
-
-# Count the number of points in the same cell
-def count_points_per_cell(inputPoints, LAMBDA):  
-    cell_dict = {}
-    for point in inputPoints:
-        cell_cord = find_cell(point, LAMBDA)
-        if cell_cord not in cell_dict.keys():
-            cell_dict[cell_cord] = 1
-        else: cell_dict[cell_cord] += 1
-
-    return [(key, cell_dict[key]) for key in cell_dict.keys()]
-    #cell_cord = find_cell(point, LAMBDA)
-    #print(point)
-    #return ((cell_cord[0], cell_cord[1]), 1)
-
-
-def find_cost_index_list(list_cell_count, target_cord):
-    for key_val in list_cell_count:
-        if (key_val[0][0] == target_cord[0] and key_val[0][1] == target_cord[1]) :
-            return key_val[1]
-    
-    return 0
-
-
-
-# Count how many points are in the neighborhood size x s
-def count_in_neighborhood(list_cell_count):
+# Count how many points are in the neighborhood 
+def count_neighborhood(cell_size, cell_size_dict):
     size_3 = 3
     size_7 = 7
     
-    list_refactor = []
-    for elem in list_cell_count :  
-        neighbors = []
-        cost_neighbours_grid3 = 0
-        cost_neighbours_grid7 = 0
+    N3 = 0
+    N7 = 0
+    for i in range(-(size_7 // 2), size_7 // 2 + 1):
+        for j in range(-(size_7 // 2), size_7 // 2 + 1):
+           key = (cell_size[0][0] + i, cell_size[0][1] + j)
+           N7 += cell_size_dict.get(key, 0) # If the key is found return the value, otherwise 0
 
-        # TODO START FROM 7 AND GO DOWN
-        for i in range(-(size_3 // 2), size_3 // 2 + 1):
-            for j in range(-(size_3 // 2), size_3 // 2 + 1):
-                cost_neighbours_grid3 += find_cost_index_list(list_cell_count, (elem[0][0] + i, elem[0][1] + j)) 
-                cost_neighbours_grid7 += cost_neighbours_grid3
+           if ((i >= -1 or i <= 1) and (j >= -1 or j <= 1)) : # Inside the 3x3 area 
+               N3 += cell_size_dict.get(key, 0)
 
-        for i in range(-(size_7 // 2), size_7 // 2 + 1):
-            for j in range(-(size_7 // 2), size_7 // 2 + 1):
-                cost_neighbours_grid7 += find_cost_index_list(list_cell_count, (elem[0][0] + i, elem[0][1] + j))
-
-        list_refactor.append((elem[0], elem[1], cost_neighbours_grid3, cost_neighbours_grid7))
-    return list_refactor
+       
+    return  [(cell_size[0], (cell_size[1], N3, N7))]
 
 
+def count_points_per_cell(partitions, LAMBDA):  
+    part_dict = {}
+    for point in partitions:
+        cell_cord = (int(point[0] / LAMBDA), int(point[1] / LAMBDA))
+        if cell_cord not in part_dict.keys():
+            part_dict[cell_cord] = 1
+        else: part_dict[cell_cord] += 1
 
+    return [(key, part_dict[key]) for key in part_dict.keys()]
+
+def invert_key_value(RDD) :
+    return [RDD[1], RDD[0]]
 
 def MRApproxOutliers(inputPoints, D, M, K):
     start_time = time.time()
-    # Divide R^2 into matrix of size LAMBDA where (i*LAMBDA, j*LAMBDA) are the real coordinates
     LAMBDA = D/2*math.sqrt(2)
 
     
     # Step A 
-    cell_counts = (inputPoints.mapPartitions(lambda point: count_points_per_cell(point, LAMBDA)) 
-                              .reduceByKey(lambda x,y : x + y))
-    """
-    cell_counts = (inputPoints.flatMap(lambda point: count_points_per_cell(point, LAMBDA))
-                              .reduceByKey(lambda x,y : x + y))
-                              #.sortByKey(True
-    """        
-
+    non_empty_cells = (inputPoints.mapPartitions(lambda partition: count_points_per_cell(partition, LAMBDA)) 
+                                  .reduceByKey(lambda x,y : x + y))
+          
     # Step B    
-    cell_counts_list = cell_counts.collect()
+    cell_size_dict = non_empty_cells.collectAsMap() # Dictionary with (cell indexes, size)
     
-    
-    cell_counts_list = count_in_neighborhood(cell_counts_list)
 
+    #Ogni partizione ha elementi con (cell indexes, size), non serve unire dopo per chiave pechè queste sono già state unite prima
+    outliers_RDD = (non_empty_cells.flatMap(lambda partition: count_neighborhood(partition, cell_size_dict)))
+
+    outliers = outliers_RDD.collect()
     true_outliers = 0
     uncertain_outliers = 0
-    for elem in cell_counts_list :
-        if (elem[3] <= M):
-            true_outliers += elem[1]
-        if (elem[3] > M and elem[2] <= M):
-            uncertain_outliers += elem[1]
+    for elem in outliers :          # elem = ((index, index), (cellSize, N3, N7))
+        if (elem[1][2] <= M): true_outliers += elem[1][0]
+        if (elem[1][2] > M and elem[1] <= M): uncertain_outliers += elem[1][0]
             
-        
     print(f"Number of sure outliers = {true_outliers}")
     print(f"Number of uncertain outliers = {uncertain_outliers}")
     
-    
+    ordered_cells_RDD = non_empty_cells.flatMap(invert_key_value).sortByKey()
     #for k in range(min(K, len(nonEmpty_cells))):   
     #   print(f"Cell: {nonEmpty_cells[k][0]}  Size = {nonEmpty_cells[k][1]}")
         
