@@ -37,7 +37,6 @@ def ExactOutliers(listOfPoints, D, M, K):
     num_outliers = 0
     for i in range(len(listOfPoints)) : 
         B_S_p = 0
-
         for j in range(len(listOfPoints)) :
             dist = math.sqrt((listOfPoints[i][0] - listOfPoints[j][0])**2 + ((listOfPoints[i][1] - listOfPoints[j][1])**2))
             if dist <= D : B_S_p += 1
@@ -54,7 +53,7 @@ def ExactOutliers(listOfPoints, D, M, K):
     print(f"Running time of ExactOutliers = {time.time() - start_time} ms")
     
 # Count how many points are in the neighborhood 
-def count_neighborhood(cell_size, cell_size_dict):
+def count_neighborhood(cell, cell_size_dict):
     size_3 = 3
     size_7 = 7
     
@@ -62,14 +61,13 @@ def count_neighborhood(cell_size, cell_size_dict):
     N7 = 0
     for i in range(-(size_7 // 2), size_7 // 2 + 1):
         for j in range(-(size_7 // 2), size_7 // 2 + 1):
-           key = (cell_size[0][0] + i, cell_size[0][1] + j)
-           N7 += cell_size_dict.get(key, 0) # If the key is found return the value, otherwise 0
+           key_shift = (cell[0][0] + i, cell[0][1] + j)
+           N7 += cell_size_dict.get(key_shift, 0) # If the key is found return the value, otherwise 0
 
            if ((i >= -1 and i <= 1) and (j >= -1 and j <= 1)) : # Inside the 3x3 area 
-               N3 += cell_size_dict.get(key, 0)
-
-       
-    return  [(cell_size[0], (cell_size[1], N3, N7))]
+               N3 += cell_size_dict.get(key_shift, 0)
+ 
+    return  [(cell[0], (cell[1], N3, N7))]
 
 
 def count_points_per_cell(partitions, LAMBDA):  
@@ -83,7 +81,7 @@ def count_points_per_cell(partitions, LAMBDA):
     return [(key, part_dict[key]) for key in part_dict.keys()]
 
 def invert_key_value(RDD) :
-    return [RDD[1], RDD[0]]
+    return [(RDD[1], RDD[0])]
 
 def MRApproxOutliers(inputPoints, D, M, K):
     start_time = time.time()
@@ -97,12 +95,11 @@ def MRApproxOutliers(inputPoints, D, M, K):
     cell_size_dict = non_empty_cells.collectAsMap() # Dictionary with (cell indexes, size)
     
     #Ogni partizione ha elementi con (cell indexes, size), non serve unire dopo per chiave pechè queste sono già state unite prima
-    outliers_RDD = (non_empty_cells.flatMap(lambda partition: count_neighborhood(partition, cell_size_dict)))
+    outliers_RDD = (non_empty_cells.flatMap(lambda cell: count_neighborhood(cell, cell_size_dict)))
 
     outliers = outliers_RDD.collect()
 
     
-
     true_outliers = 0
     uncertain_outliers = 0
     for elem in outliers :          # elem = ((index, index), (cellSize, N3, N7))
@@ -112,9 +109,12 @@ def MRApproxOutliers(inputPoints, D, M, K):
     print(f"Number of sure outliers = {true_outliers}")
     print(f"Number of uncertain outliers = {uncertain_outliers}")
     
-    #ordered_cells_RDD = non_empty_cells.flatMap(invert_key_value).sortByKey()
-    #for k in range(min(K, len(nonEmpty_cells))):   
-    #   print(f"Cell: {nonEmpty_cells[k][0]}  Size = {nonEmpty_cells[k][1]}")
+    ordered_cells = (non_empty_cells.flatMap(invert_key_value)
+                                        .sortByKey()
+                                        .take(K))
+    
+    for i in ordered_cells :        # i = (cellSize, cell indexes)
+        print(f"Cell: {i[1]}  Size = {i[0]}")
         
     print(f"Running time of MRApproxOutliers = {time.time() - start_time} ms")    
     
@@ -156,13 +156,13 @@ def main():
     numPoints = inputPoints.count()                                     # Total number of points in the RDD
     
     # PRINTING PARAMETERS
-    #print(f"Dataset = {data_path.split("\\")[-1]} D={D} M={M} K={K} L={L}")
+    print(f"Dataset = {data_path.split("\\")[-1]} D={D} M={M} K={K} L={L}")
     print("Number of points = ", numPoints)
     
     
-    #if numPoints <= 200000 : # EXACT ALGORITHM
-     #   listOfPoints = inputPoints.collect()
-      #  ExactOutliers(listOfPoints, D, M, K)
+    if numPoints <= 200000 : # EXACT ALGORITHM
+        listOfPoints = inputPoints.collect()
+        ExactOutliers(listOfPoints, D, M, K)
     
     # APPROXIMATE ALGORITHM
     MRApproxOutliers(inputPoints, D, M, K)
