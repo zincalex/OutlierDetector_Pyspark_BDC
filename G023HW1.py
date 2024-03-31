@@ -65,7 +65,7 @@ def count_neighborhood(cell_size, cell_size_dict):
            key = (cell_size[0][0] + i, cell_size[0][1] + j)
            N7 += cell_size_dict.get(key, 0) # If the key is found return the value, otherwise 0
 
-           if ((i >= -1 or i <= 1) and (j >= -1 or j <= 1)) : # Inside the 3x3 area 
+           if ((i >= -1 and i <= 1) and (j >= -1 and j <= 1)) : # Inside the 3x3 area 
                N3 += cell_size_dict.get(key, 0)
 
        
@@ -75,7 +75,7 @@ def count_neighborhood(cell_size, cell_size_dict):
 def count_points_per_cell(partitions, LAMBDA):  
     part_dict = {}
     for point in partitions:
-        cell_cord = (int(point[0] / LAMBDA), int(point[1] / LAMBDA))
+        cell_cord = (int(math.floor(point[0] / LAMBDA)), int(math.floor(point[1] / LAMBDA)))
         if cell_cord not in part_dict.keys():
             part_dict[cell_cord] = 1
         else: part_dict[cell_cord] += 1
@@ -87,9 +87,8 @@ def invert_key_value(RDD) :
 
 def MRApproxOutliers(inputPoints, D, M, K):
     start_time = time.time()
-    LAMBDA = D/2*math.sqrt(2)
+    LAMBDA = D / (2*math.sqrt(2))
 
-    
     # Step A 
     non_empty_cells = (inputPoints.mapPartitions(lambda partition: count_points_per_cell(partition, LAMBDA)) 
                                   .reduceByKey(lambda x,y : x + y))
@@ -97,21 +96,23 @@ def MRApproxOutliers(inputPoints, D, M, K):
     # Step B    
     cell_size_dict = non_empty_cells.collectAsMap() # Dictionary with (cell indexes, size)
     
-
     #Ogni partizione ha elementi con (cell indexes, size), non serve unire dopo per chiave pechè queste sono già state unite prima
     outliers_RDD = (non_empty_cells.flatMap(lambda partition: count_neighborhood(partition, cell_size_dict)))
 
     outliers = outliers_RDD.collect()
+
+    
+
     true_outliers = 0
     uncertain_outliers = 0
     for elem in outliers :          # elem = ((index, index), (cellSize, N3, N7))
         if (elem[1][2] <= M): true_outliers += elem[1][0]
-        if (elem[1][2] > M and elem[1] <= M): uncertain_outliers += elem[1][0]
+        elif (elem[1][1] <= M): uncertain_outliers += elem[1][0]
             
     print(f"Number of sure outliers = {true_outliers}")
     print(f"Number of uncertain outliers = {uncertain_outliers}")
     
-    ordered_cells_RDD = non_empty_cells.flatMap(invert_key_value).sortByKey()
+    #ordered_cells_RDD = non_empty_cells.flatMap(invert_key_value).sortByKey()
     #for k in range(min(K, len(nonEmpty_cells))):   
     #   print(f"Cell: {nonEmpty_cells[k][0]}  Size = {nonEmpty_cells[k][1]}")
         
@@ -159,9 +160,9 @@ def main():
     print("Number of points = ", numPoints)
     
     
-    if numPoints <= 200000 : # EXACT ALGORITHM
-        listOfPoints = inputPoints.collect()
-        ExactOutliers(listOfPoints, D, M, K)
+    #if numPoints <= 200000 : # EXACT ALGORITHM
+     #   listOfPoints = inputPoints.collect()
+      #  ExactOutliers(listOfPoints, D, M, K)
     
     # APPROXIMATE ALGORITHM
     MRApproxOutliers(inputPoints, D, M, K)
