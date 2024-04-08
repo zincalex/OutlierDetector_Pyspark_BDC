@@ -93,7 +93,7 @@ def count_neighborhood(cell, non_empty_cells_dict):
            if ((i >= -1 and i <= 1) and (j >= -1 and j <= 1)) : # Inside the 3x3 area 
                N3 += non_empty_cells_dict.get(key_shift, 0)
  
-    return  [(cell[0], (cell[1], N3, N7))]
+    return  (cell[0], (cell[1], N3, N7))
 
 
 
@@ -129,7 +129,7 @@ def MRApproxOutliers(inputPoints, D, M, K):
     non_empty_cells_dict = non_empty_cells.collectAsMap()   # Dictionary with (cell indexes, size)     
 
     # Step B    
-    outliers_RDD = (non_empty_cells.flatMap(lambda cell: count_neighborhood(cell, non_empty_cells_dict)))
+    outliers_RDD = (non_empty_cells.map(lambda cell: count_neighborhood(cell, non_empty_cells_dict)))
     outliers = outliers_RDD.collect()   # List of (cell indexes, (size, N3, N7))
 
     true_outliers = 0
