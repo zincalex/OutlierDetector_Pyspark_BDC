@@ -101,7 +101,7 @@ def invert_key_value(RDD) :
     """
     Given an RDD, it swaps the key and the value 
     """
-    return [(RDD[1], RDD[0])]
+    return (RDD[1], RDD[0])
 
 
 
@@ -141,7 +141,7 @@ def MRApproxOutliers(inputPoints, D, M, K):
     print(f"Number of sure outliers = {true_outliers}")
     print(f"Number of uncertain outliers = {uncertain_outliers}")
     
-    ordered_cells = (non_empty_cells.flatMap(invert_key_value)
+    ordered_cells = (non_empty_cells.map(invert_key_value)
                                         .sortByKey()
                                         .take(K))
     
@@ -187,7 +187,7 @@ def main():
     
     # PRINTING PARAMETERS
     print(f"{data_path} D={D} M={M} K={K} L={L}")
-    print("Number of points = ", numPoints)
+    print(f"Number of points = {numPoints}")
     
     
     if numPoints <= 200000 : # EXACT ALGORITHM
