@@ -11,7 +11,7 @@ To run the main program use the python script `G023HW1.py`. Such script accepts 
 usage: GO23HW1.py <file_name> <D> <M> <K> <L>
 
 arguments:
-- file_name : input csv file with point's coordinate
+- file_name : input file with point's coordinate
 - D         : distance to consider around each point, outliers distance
 - M         : minimum number of points inside a cell to not be an outliers
 - K         : number of points to be printed
